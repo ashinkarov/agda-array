@@ -86,6 +86,13 @@ subst-ix {suc n} {x ∷ xs} {y ∷ ys} pf (i ∷ iv) rewrite (pf zero) = i ∷ s
 subst-ar : ∀ {a}{X : Set a}{n}{s s₁ : Vec ℕ n} → s =s s₁ → Ar X n s → Ar X n s₁
 subst-ar pf (imap f) = imap λ iv → f $ subst-ix (sym ∘ pf) iv
 
+subst-ar-d : ∀ {a}{X : Set a}{n m}{s : Vec ℕ n}{s₁ : Vec ℕ m}
+           → (n=m : n ≡ m)
+           → s =s (subst (Vec ℕ) (sym n=m) s₁)
+           → Ar X n s → Ar X m s₁
+subst-ar-d refl pf a = subst-ar pf a
+
+
 
 -- If we have an index, produce a pair containing an array representation
 -- and the proof that the index is smaller than the shape.
@@ -96,20 +103,13 @@ ix→a ix = imap (λ iv → toℕ $ ix-lookup ix (ix-lookup iv zero)) ,
           λ iv → toℕ<n (ix-lookup ix (ix-lookup iv zero))
           
 
--- Inverse of the above
-a→ix : ∀ {d} --{s : Fin d → ℕ}
-     → (ax sh : Ar ℕ 1 (d ∷ []))
-     -- XXX we can make this inequality irrelevant
-     -- and recompute it when it is needed, as <a
-     -- is decideable.
-     → ax <a sh
-     → Ix d (a→s sh)
-a→ix (imap axf) (imap shf) ax<sh = ix-tabulate from-pf
-  where
-    from-pf : _
-    from-pf i rewrite (lookup∘tabulate  (shf ∘ (_∷ [])) i)
-      = fromℕ≤ (ax<sh (i ∷ []))
 
+{-
+try : ∀ a b → .(a < b) → Fin b
+try a b pf = let
+               x = raise (b ∸ a) (fromℕ a)
+             in {!Array.Properties._<a?_!} 
+-}
 
 -- XXX we can do this via imap/lookup if we want to, so that it
 -- extracts to more efficient code.
@@ -191,7 +191,7 @@ rm-thm {ℕ.suc a₁} {ℕ.suc b₁} x pf y = +-mono-≤ (toℕ<n y) $   *-mono�
 Πs≡0⇒Fin0 : ∀ {n} → (s : Vec ℕ n)
           → (Ix n s) → (prod s ≡ 0)
           → Fin 0
-Πs≡0⇒Fin0 (x ∷ s) (i ∷ iv) Πxs≡0 with i*j≡0⇒i≡0∨j≡0 x Πxs≡0
+Πs≡0⇒Fin0 (x ∷ s) (i ∷ iv) Πxs≡0 with  m*n≡0⇒m≡0∨n≡0 x Πxs≡0
 Πs≡0⇒Fin0 (x ∷ s) (i ∷ iv) Πxs≡0 | inj₁ x≡0 rewrite x≡0 = i
 Πs≡0⇒Fin0 (x ∷ s) (i ∷ iv) Πxs≡0 | inj₂ Πs≡0 = Πs≡0⇒Fin0 s iv Πs≡0
 

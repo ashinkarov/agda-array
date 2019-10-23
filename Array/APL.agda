@@ -1,9 +1,10 @@
-{-# OPTIONS --rewriting  #-}
+--{-# OPTIONS --rewriting  #-}
 module Array.APL where
 
 open import Array.Base
 open import Array.Properties
 open import Data.Nat
+open import Data.Nat.DivMod hiding (_/_)
 open import Data.Nat.Properties
 open import Data.Fin using (Fin; zero; suc; raise; toℕ; fromℕ≤) --hiding (_+_; _<_)
 open import Data.Fin.Properties using (toℕ<n) --hiding (_≟_)
@@ -14,6 +15,9 @@ open import Agda.Builtin.Float
 open import Function
 open import Relation.Binary.PropositionalEquality hiding (Extensionality)
 open import Relation.Nullary
+open import Relation.Nullary.Decidable
+--open import Relation.Nullary.Negation
+--open import Relation.Binary
 
 -- Now we start to introduce APL operators trying
 -- to maintain syntactic rules and semantics.
@@ -60,12 +64,24 @@ a -safe- b = a ∸ b
 -- FIXME As _-ₙ_ requires a proof, we won't consider yet
 -- full dyadic types for _-ₙ_, as it would require us
 -- to define dyadic types for ≥a.
+infixr 20 _-ₙ_
 _-ₙ_ : ∀ {n}{s}
      → (a : Ar ℕ n s) → (b : Ar ℕ n s)
      → .{≥ : a ≥a b}
      → Ar ℕ n s
 (imap f -ₙ imap g) {≥} = imap λ iv → (f iv -safe- g iv) {≥ = ≥ iv}
 
+
+--≢-sym : ∀ {X : Set}{a b : X} → a ≢ b → b ≢ a
+--≢-sym pf = pf ∘ sym
+
+
+infixr 20 _÷ₙ_
+_÷ₙ_ : ∀ {n}{s}
+     → (a : Ar ℕ n s) → (b : Ar ℕ n s)
+     → {≥0 : cst 0 <a b}
+     → Ar ℕ n s
+_÷ₙ_ (imap f) (imap g) {≥0} = imap λ iv → (f iv div g iv) {≢0 = fromWitnessFalse (≢-sym $ <⇒≢ $ ≥0 iv) }
 
 infixr 20 _+⟨_⟩ₙ_
 infixr 20 _×⟨_⟩ₙ_
@@ -136,8 +152,14 @@ infixr 20 ,_
 
 reduce-1d : ∀ {a}{X : Set a}{n} → Ar X 1 (n ∷ []) → (X → X → X) → X → X
 reduce-1d {n = zero}  (imap p) op neut = neut
-reduce-1d {n = suc n} (imap p) op neut = reduce-1d (imap λ iv → p ((raise 1 $ ix-lookup iv zero) ∷ []))
-                                                   op (op neut (p $ zero ∷ []))
+reduce-1d {n = suc n} (imap p) op neut = op (p $ zero ∷ [])
+                                            (reduce-1d (imap (λ iv → p (suc (ix-lookup iv zero) ∷ []))) op neut)
+
+{-
+  This goes right to left if we want to
+  reduce-1d (imap λ iv → p ((raise 1 $ ix-lookup iv zero) ∷ []))
+            op (op neut (p $ zero ∷ []))
+-}
 
 
 Scal : ∀ {a} → Set a → Set a
@@ -265,7 +287,7 @@ iota-res-t {n = n} iota-vec  sh = Ar (Σ (Ar ℕ 1 (n ∷ []))
 
 
 
-{-# BUILTIN REWRITE _≡_ #-}
+--{-# BUILTIN REWRITE _≡_ #-}
 
 thm : ∀ {a}{X : Set a}{s : Vec X 1} →  head s ∷ [] ≡ s
 thm {s = x ∷ []} = refl
@@ -397,96 +419,3 @@ mapₐ₂ : ∀ {a}{X Y Z : Set a}{n s} → (X → Y → Z)
 mapₐ₂ f (imap p) (imap p₁) = imap λ iv → f (p iv) (p₁ iv)
 
 
-a≤b⇒b≡c⇒a≤c : ∀ {a b c} → a ≤ b → b ≡ c → a ≤ c
-a≤b⇒b≡c⇒a≤c a≤b refl = a≤b
-
-a≤b⇒a≡c⇒b≡d⇒c≤d : ∀ {a b c d} → a ≤ b → a ≡ c → b ≡ d → c ≤ d
-a≤b⇒a≡c⇒b≡d⇒c≤d a≤b refl refl = a≤b
-
-
-thm1 : ∀ {n}{ix s s₁ : Ar ℕ 1 (n ∷ [])}
-      → ix <a s → s₁ ≥a s → s₁ ≥a ix
-thm1 {ix = imap x} {imap x₁} {imap x₂} ix<s ix≤s₁ iv = ≤-trans (<⇒≤ $ ix<s iv) (ix≤s₁ iv)
-
-moo : ∀ {a b} → b < a →  a ∸ suc b + 1 ≡ a ∸ b
-moo {a} {b} pf = begin
-                     a ∸ suc (b) + 1  ≡⟨ sym $ +-∸-comm 1 pf ⟩
-                     a + 1 ∸ suc b    ≡⟨ cong₂ _∸_ (+-comm a 1) (refl {x = suc b}) ⟩
-                     a ∸ b
-                   ∎
-                   where open ≡-Reasoning
-
-
-thm2 : ∀ {n}{ix s s₁ : Ar ℕ 1 (n ∷ [])}
-       → (ix<s : ix <a s)
-       → (s₁≥s : s₁ ≥a s)
-       → (s₁ -ₙ ix) {≥ = thm1 {s₁ = s₁} ix<s s₁≥s {-thm1 ix<s s₁≥s-}} ≥a ((s₁ -ₙ s) {≥ = s₁≥s} +ₙ (scal 1))
-thm2 {ix = imap ix} {imap s} {imap s₁} ix<s s₁≥s iv =
-       let
-         s₁-[1+ix]≥s₁-s = ∸-monoʳ-≤ (s₁ iv) (ix<s iv)
-         xxx = +-monoˡ-≤ 1 s₁-[1+ix]≥s₁-s
-       in a≤b⇒b≡c⇒a≤c xxx (moo {a = s₁ iv} {b = ix iv} (≤-trans (ix<s iv) (s₁≥s iv))) 
-
-{-dugh : ∀ {n}{iv : Ix 1 (n ∷ [])}{s₁ : Vec ℕ n}{ix : Ar ℕ 1 (n ∷ [])}{≥1 ≥2}
-     → unimap ((imap (λ iv₁ → lookup s₁ (iiv₁ zero)) -ₙ ix) {≥ = ≥1}) iv ≡
-       (a→s $ (s→a s₁ -ₙ ix) {≥ = ≥2}) (iv zero)
-dugh {iv = iv} {s₁ = s₁} {ix = imap x} = cong (s₁ (iv zero) ∸_) ? --(cong x (ext λ i → cong iv (Fin1≡0 i)))
--}
-
-
-A≥B⇒A≡C⇒C≥B : ∀ {d s}{A B C : Ar ℕ d s}
-             → A ≥a B → A =a C → C ≥a B
-A≥B⇒A≡C⇒C≥B {A = imap x} {imap x₁} {imap x₂} A≥B A≡C iv rewrite (sym $ A≡C iv) = A≥B iv
-
-
-
-
-toto : ∀ {n} {s s₁ : Vec ℕ n}
-         {ix : Ar ℕ 1 (n ∷ [])}
-         {≥1} →
-       ((imap (λ iv → lookup s₁ (ix-lookup iv zero)) -ₙ ix) {≥ = ≥1}) =a
-       imap
-       (λ z →
-          lookup (a→s ((imap (λ iv → lookup s₁ (ix-lookup iv zero)) -ₙ ix) {≥ = ≥1}))
-          (ix-lookup z zero))
-toto {s = s} {s₁ = s₁} {ix = (imap ix)} {≥1} iv = sym $ s→a∘a→s ((s→a s₁ -ₙ imap ix) {≥ = ≥1}) iv
-
-
-boo : ∀ {n} s → Vec ℕ n -- Ar ℕ 1 (n ∷ [])
-boo s = a→s (s→a s)
-
-goo : ∀ {n} → Ar ℕ 1 (n ∷ []) → Ar ℕ 1 (n ∷ [])
-goo a = s→a (a→s a) -- (imap a) = s→a (a→s (imap a))
-
-testxx = goo {n = 5} (cst 3)
-
-
-conv : ∀ {n s s₁}
-       → Ar ℕ n s
-       → Ar ℕ n s₁
-       → {s₁≥s : s→a s₁ ≥a s→a s}
-       → let sr = a→s $ (s→a s₁ -ₙ s→a s) {≥ = s₁≥s} +ₙ scal 1
-         in Ar ℕ n sr
-conv {n = n} {s = s} {s₁ = s₁} w a {s₁≥s} = let
-               sr = (s→a s₁ -ₙ s→a s) {≥ = s₁≥s} +ₙ scal 1
-               idxs = ι ρ w
-               --rots : _ -- (v : Ar ℕ 1 (λ _ → n)) → v <a imap (λ iv → s (iv zero)) → _
-               rots ix ix<s =
-                         let
-                           --ix , ix<s = ix,ix<s
-                           ix↓a = (ix ↓ a) {pf = thm1 ix<s s₁≥s} --thm1 {s₁ = s→a s₁} ix<s s₁≥s} -- thm1 {s₁ = s→a s₁} ix<s s₁≥s }
-                           ttt = thm2 {s₁ = s→a s₁} ix<s s₁≥s
-                         in
-                           (sr ↑ ix↓a) {pf = A≥B⇒A≡C⇒C≥B
-                                                 ttt
-                                                 (toto {s = s} {s₁ = s₁} {≥1 = thm1 {s₁ = s→a s₁} ix<s s₁≥s}) } 
-               --rots-unw : _ --Σ (Ar ℕ 1 (λ _ → n)) (λ v → v <a imap (λ iv → s (iv zero))) → _
-               rots-unw ix,ix<s = (let
-                                     ix , ix<s = ix,ix<s
-                                    in rots ix ix<s)
-               r = rots-unw ¨ idxs
-               mul = mapₐ₂ (λ weight arr → arr ×⟨ n-n ⟩ₙ (cst weight)) w (subst-ar (a→s∘s→a s) r)
-               res = reduce-1d (, mul) _+ₙ_ (cst 0)
-              in res 
-
-cex₁ = conv (s→a $ 1 ∷ []) (s→a $ 2 ∷ 3 ∷ []) {s₁≥s = λ { (zero ∷ []) → s≤s z≤n} }
