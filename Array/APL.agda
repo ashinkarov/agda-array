@@ -1,4 +1,3 @@
---{-# OPTIONS --rewriting  #-}
 module Array.APL where
 
 open import Array.Base
@@ -6,8 +5,8 @@ open import Array.Properties
 open import Data.Nat
 open import Data.Nat.DivMod hiding (_/_)
 open import Data.Nat.Properties
-open import Data.Fin using (Fin; zero; suc; raise; toℕ; fromℕ≤) --hiding (_+_; _<_)
-open import Data.Fin.Properties using (toℕ<n) --hiding (_≟_)
+open import Data.Fin using (Fin; zero; suc; raise; toℕ; fromℕ≤)
+open import Data.Fin.Properties using (toℕ<n)
 open import Data.Vec
 open import Data.Vec.Properties
 open import Data.Product
@@ -16,7 +15,7 @@ open import Function
 open import Relation.Binary.PropositionalEquality hiding (Extensionality)
 open import Relation.Nullary
 open import Relation.Nullary.Decidable
---open import Relation.Nullary.Negation
+open import Relation.Nullary.Negation
 --open import Relation.Binary
 
 -- Now we start to introduce APL operators trying
@@ -133,21 +132,45 @@ module xx where
 
   test₁ = a +ₙ a
   test₂ = a +ₙ s
+  test₃ = s +ₙ a 
   --test = (s +ₙ s) 
-  test₃ = s +⟨ n-n ⟩ₙ s
+  test₄ = s +⟨ n-n ⟩ₙ s
 
-  test₄ : ∀ {n s s₁} → Ar ℕ n s → Ar ℕ 0 s₁ → Ar ℕ n s
-  test₄ = _+ₙ_
+  test₅ : ∀ {n s s₁} → Ar ℕ n s → Ar ℕ 0 s₁ → Ar ℕ n s
+  test₅ = _+ₙ_
 
 
 infixr 20 ρ_
 ρ_ : ∀ {ℓ}{X : Set ℓ}{d s} → Ar X d s → Ar ℕ 1 (d ∷ [])
 ρ_ {s = s} _  = s→a s
 
-
 infixr 20 ,_
 ,_ : ∀ {a}{X : Set a}{n s} → Ar X n s → Ar X 1 (prod s ∷ [])
 ,_ {s = s} (imap p) = imap λ iv → p (off→idx s iv)
+
+
+-- Reshape
+infixr 20 _ρ_
+_ρ_ : ∀ {a}{X : Set a}{n}{sa}
+    → (s : Ar ℕ 1 (n ∷ []))
+    → (a  : Ar X n sa)
+    -- if the `sh` is non-empty, `s` must be non-empty as well.
+    → {s≢0⇒ρa≢0 : prod (a→s s) ≢ 0 → prod sa ≢ 0}
+    → Ar X n (a→s s)
+_ρ_ {sa = sa} s a {s≢0⇒ρa≢0} with  prod sa ≟ 0 | prod (a→s s) ≟ 0 
+_ρ_ {sa = sa} s a {s≢0⇒ρa≢0}     | _           | yes s≡0  = mkempty (a→s s) s≡0
+_ρ_ {sa = sa} s a {s≢0⇒ρa≢0}     | yes ρa≡0    | no  s≢0  = contradiction ρa≡0 (s≢0⇒ρa≢0 s≢0)
+_ρ_ {sa = sa} s a {s≢0⇒ρa≢0}     | no  ρa≢0    | _        = imap from-flat
+  where    
+    from-flat : _
+    from-flat iv = let
+                     off  = idx→off (a→s s) iv --{!!} -- (ix-lookup iv zero)
+                     flat = unimap $ , a
+                     ix   = (toℕ (ix-lookup off zero) mod prod sa)
+                            {≢0 = fromWitnessFalse ρa≢0}
+                   in 
+                     flat (ix ∷ [])
+
 
 
 reduce-1d : ∀ {a}{X : Set a}{n} → Ar X 1 (n ∷ []) → (X → X → X) → X → X
@@ -263,7 +286,7 @@ module test-reduce where
   test₄ = refl
 
 
--- Ravel -- the size of the leading axis.
+-- The size of the leading axis.
 infixr 20 ≢_
 ≢_ : ∀ {a}{X : Set a}{n s} → Ar X n s → Scal ℕ
 ≢_ {n = zero}      a = scal 1
@@ -284,48 +307,6 @@ iota-res-t {n = n} iota-scal sh = Ar (Σ ℕ λ x → x < unscal sh)
 iota-res-t {n = n} iota-vec  sh = Ar (Σ (Ar ℕ 1 (n ∷ []))
                                       λ v → v <a sh)
                                      n (a→s sh)
-
-
-
---{-# BUILTIN REWRITE _≡_ #-}
-
-thm : ∀ {a}{X : Set a}{s : Vec X 1} →  head s ∷ [] ≡ s
-thm {s = x ∷ []} = refl
-
-expand-s→a∘a→s : ∀ {el}{ar : Ar ℕ 1 (el ∷ [])} → ∀ (iv : Ix 1 (el ∷ []))
-               → lookup (a→s ar) (ix-lookup iv zero) ≡ unimap ar iv
-expand-s→a∘a→s {ar = imap f} (x ∷ []) rewrite (lookup∘tabulate (f ∘ (_∷ [])) x) = refl
---unimap (s→a (a→s ar)) iv ≡ unimap ar (subst (λ x → Ix 1 x) thm iv)
---expand-s→a∘a→s {s} {imap f} iv = {!!}
-
-
---open import Axiom.Extensionality.Propositional
---postulate
---  ext : ∀ {a b} → Extensionality a b
-
-imap∘unimap : ∀ {a}{X : Set a}{d s} → (ar : Ar X d s) → imap (λ iv → unimap ar iv) ≡ ar
-imap∘unimap (imap ar) = refl
-
-
---{-# REWRITE expand-s→a∘a→s     #-}
---{-# REWRITE imap∘unimap        #-}
---{-# REWRITE tabulate∘lookup    #-}
---{-# REWRITE lookup∘tabulate    #-}
-
-
-n+0≡n : ∀ n → n + 0 ≡ n
-n+0≡n zero = refl
-n+0≡n (suc n) = cong suc (n+0≡n n)
-
---{-# REWRITE n+0≡n     #-}
-
-
-test = λ x → x + 0
-
-
---xthm : ∀ {a}{X : Set a}{s}{sh : Ix 1 (s ∷ []) → X} → tabulate (λ i → sh (i ∷ [])) ≡ sh
-
---xthm : ∀ {a b c} → 
 
 a<b⇒b≡c⇒a<c : ∀ {a b c} → a < b → b ≡ c → a < c
 a<b⇒b≡c⇒a<c a<b refl = a<b
@@ -348,20 +329,30 @@ infixr 20 ι_
 
 
 
--- FIXME _,_ is missing
+-- XXX We are going to use _·_ instead of _,_ as the
+-- latter is a constructor of dependent sum.  Renaming
+-- all the occurrences to something else would take
+-- a bit of work which we should do later.
+infixr 30 _·_
+_·_ : ∀ {a}{X : Set a}{n} → X → Ar X 1 (n ∷ []) → Ar X 1 (suc n ∷ [])
+x · (imap p) = imap λ iv → case ix-lookup iv zero of λ where
+                             zero     → x
+                             (suc j) → p (j ∷ [])
 
-
-infixr 20 _¨_
-_¨_ : ∀ {a}{X Y : Set a}{n s}
+-- Note that two dots in an upper register combined with
+-- the underscore form the _̈  symbol.  When the symbol is
+-- used on its own, it looks like ̈ which is the correct
+-- "spelling".
+infixr 20 _̈_
+_̈_ : ∀ {a}{X Y : Set a}{n s}
     → (X → Y)
     → Ar X n s
     → Ar Y n s
-f ¨ imap p = imap λ iv → f $ p iv
+f ̈ imap p = imap λ iv → f $ p iv
 
 
 
 -- Take and Drop
-
 ax+sh<s : ∀ {n}
         → (ax sh s : Ar ℕ 1 (n ∷ []))
         → (s≥sh : s ≥a sh)
@@ -414,8 +405,10 @@ _↓_ {s = s} (imap q) (imap f) {pf} | no  Π≢0 = imap mkdrop
                 in f (subst-ix (a→s∘s→a s) ix) 
 
 
-mapₐ₂ : ∀ {a}{X Y Z : Set a}{n s} → (X → Y → Z)
-       → Ar X n s → Ar Y n s → Ar Z n s
-mapₐ₂ f (imap p) (imap p₁) = imap λ iv → f (p iv) (p₁ iv)
+_̈⟨_⟩_ : ∀ {a}{X Y Z : Set a}{n s} 
+     → Ar X n s
+     → (X → Y → Z)
+     → Ar Y n s → Ar Z n s
+(imap p) ̈⟨ f ⟩ (imap p₁) = imap λ iv → f (p iv) (p₁ iv)
 
 
