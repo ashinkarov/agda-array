@@ -88,12 +88,6 @@ instance
     ε = ok []
     }
 
-{-
-_#l_ : ∀ {a}{X : Set a} → Maybe $ List X → Maybe $ List X → Maybe $ List X
-nothing #l _ = nothing
-_ #l nothing = nothing
-just x #l just y = just $ x ++ y
--}
 
 defToTerm : Name → Definition → List (Arg Term) → Term
 defToTerm _ (function cs) as = pat-lam cs as
@@ -254,48 +248,6 @@ macro
      --q ← quoteTC v
      q ← quoteTC (pi-to-ctx t)
      unify a q
-{-
-  norm-test : Term → Term → TC ⊤
-  norm-test tm a = do
-    t ← derefT tm
-    v ← derefImmediate tm
-    let pat = hArg dot
-              ∷ vArg (con (quote V._∷_)
-                          (hArg (var "_") ∷ vArg (var "x") ∷ vArg (var "xs") ∷ []))
-              ∷ []
-
-    let vec-sum-pat = (hArg dot ∷
-                       vArg
-                       (con (quote V._∷_)
-                        (hArg (var "_") ∷ vArg (var "x") ∷ vArg (var "a") ∷ []))
-                       ∷
-                       vArg
-                       (con (quote V._∷_)
-                        (hArg dot ∷ vArg (var "y") ∷ vArg (var "b") ∷ []))
-                       ∷ [])
-    let vec-args = (hArg (def (quote lzero) []) ∷
-                    vArg (def (quote Bool) []) ∷
-                    vArg (var 0 []) ∷ [])
-
-    {-
-    let ty-args = args-to-ctx vec-args 0
-    t ← getType (quote V._∷_)
-    let t = subst-args 2 (reverse $ take-ctx' ty-args 2) 0 t
-    -}
-    let ctx = pi-to-ctx t
-    t ← pats-ctx ctx vec-sum-pat
-
-    --t ← inferType v -- (vArg n ∷ [ vArg lz ]))
-    --let v = plug-new-args v (vArg n ∷ [ vArg lz ])
-    --t ← inContext (reverse $ hArg lz ∷ [ hArg n ]) (normalise v)
-    --t ← reduce t
-    --t ← getType t
-    --t ← inContext [] (normalise t)
-    --q ← quoteTC (pi-to-ctx t)
-    q ← quoteTC t
-    unify a q
-
--}
 
   rmkstring : Term → Term → TC ⊤
   rmkstring f a = unify (lit (string "Test")) a
@@ -307,137 +259,14 @@ macro
 pi-to-ctx (Π[ s ∶ a ] x) = (a ∷ pi-to-ctx x)
 pi-to-ctx _ = []
 
-{-
-ctx-to-pi : List (Arg Type) → Type
-ctx-to-pi [] = def (quote ⊤) []
-ctx-to-pi (a ∷ t) = Π[ "_" ∶  a ] ctx-to-pi t
 
-ty-con-args : Arg Type → List $ Arg Type
-ty-con-args (arg _ (con c args)) = args
-ty-con-args (arg _ (def c args)) = args
-ty-con-args _ = []
+--{-# BUILTIN REWRITE _≡_ #-}
+--{-# REWRITE +-identityʳ #-}
 
--- XXX we need to add minimum index which we subsitute
-args-to-ctx [] _ = []
-args-to-ctx (arg i (var x vargs) ∷ args) o = (arg i (var (o + x) (args-to-ctx vargs o))) ∷ args-to-ctx args (1 + o)
-args-to-ctx (arg i (con c cargs) ∷ args) o = arg i (con c (args-to-ctx cargs o)) ∷ args-to-ctx args (1 + o)
-args-to-ctx (arg i (def f dargs) ∷ args) o = arg i (def f (args-to-ctx dargs o)) ∷ args-to-ctx args (1 + o)
-args-to-ctx (arg i (lam v t) ∷ args) o = {!!}
-args-to-ctx (arg i (pat-lam cs args₁) ∷ args) o = {!!}
-args-to-ctx (arg i (Π[ s ∶ a ] x) ∷ args) o =
-  -- replace a as usual;
-  -- replace x with min=(1+min) and the same offset
-  {!!}
-args-to-ctx (arg i (sort s) ∷ args) o = {!!}
-args-to-ctx (a@(arg i (lit l)) ∷ args) o = a ∷ args-to-ctx args (1 + o)
-args-to-ctx (arg i (meta x x₁) ∷ args) o = {!!}
-args-to-ctx (a@(arg i unknown) ∷ args) o = a ∷ args-to-ctx args (1 + o)
-
-
-pats-ctx [] [] = return $ ok []
-pats-ctx [] (x ∷ pats) = return $ error "pats-ctx: more patterns than elements in context"
-pats-ctx (x ∷ ctx) [] = return $ error "pats-ctx: more elements in context than patterns"
-pats-ctx (x ∷ ctx) (arg i trm@(con c ps) ∷ pats) = do
-  t ← getType c
-  --t ← inferType trm
-  -- List : {a : Level} → (A : Set a) → Set a
-  -- List._∷_ {a : Level} → (A : Set a) → (x : A) → (xs : List A) → List A
-  -- x should be something like
-  -- List 0 ℕ
-  -- ps should be
-  -- x′ ∷ xs′
-  -- we need to generate the context ℕ , List 0 ℕ
-  -- which means that we want to put arguments of list
-  let ty-args = args-to-ctx (ty-con-args x) 0
-  -- Now, a constructor may supply a bunch of the arguments itself, e.g.
-  -- Vec : (a : Level) → Set a → ℕ → Set a,
-  -- Vec._∷_ : (a : Level) → (A : Set a) → (n : ℕ) → A → Vec A n
-  -- but the constructor will have three arguments:
-  -- _∷_ (n , x , xs)
-  -- so we do not substitute all the arguments of the type, into the
-  -- type of constructor, but only to match the pattens ps.
-  let ctx-t = pi-to-ctx t
-  let diff = length ctx-t ∸ length ps
-  case subst-args diff (reverse $ take-ctx' ty-args diff) 0 t of λ where
-  --case subst-args (length ty-args) (ty-args) 0 t of λ where -- $ take-ctx' ty-args diff) 0 t of λ where
-    (error s) → return $ error s
-    (ok t′) → do
-      -- XXX we'd have to normalise in the function's context!
-      --t′ ← (normalise t′)
-      --let t′ = drop-ctx' (ty-args ++ pi-to-ctx t′) diff --(length ctx-t ∸ length ps)
-      let prefix = length ty-args ∸ diff
-      -- grab diff - ty-args many types from t′
-      let ty-prefix = take-ctx' (pi-to-ctx t′) prefix
-      -- push the remaining ty-args arguments into the context
-      case subst-args (prefix) (reverse $ drop-ctx' ty-args prefix) 0 t′ of λ where
-        (error s) → return $ error s
-        (ok t″) → do
-           ctxl ← pats-ctx (ty-prefix ++ pi-to-ctx t″) ps -- (pi-to-ctx t′) ps
-           ctxr ← pats-ctx ctx pats
-           return $ ctxl ++ ctxr
-
-pats-ctx (x ∷ ctx) (arg i dot ∷ pats) = do
-  -- Dot pattern is the same as "_" variable, soa
-  -- we simply use its type similarly to var case.
-
-  --ctxr ← pats-ctx ctx pats
-  --return $ ok [ x ] ++ ctxr --(just $ x ∷ []) #l ctxr
-
-  pats-ctx ctx pats
-
-  -- No, this is bullshit
-  {-
-  ctxr ← pats-ctx ctx pats
-  case ctxr of λ where
-    (ok t) → case subst-args 0 [ x ] 0 (ctx-to-pi t) of λ where
-              (ok t) → return $ ok $ pi-to-ctx t
-              (error s) → return $ error s
-    (error s) → return $ error s
-  -}
-  {-
-  case subst-args 0 [ x ] 0 (ctx-to-pi ctxr) of λ where
-    (ok t) → ? --return $ pi-to-ctx t
-    (error s) → ? -- return $ error s
-  -}
-  --return $ error "DOT PAT"
-pats-ctx (x ∷ ctx) (arg i (var s) ∷ pats) = do
-  ctxr ← pats-ctx ctx pats
-  return $ ok [ x ] ++ ctxr -- (just $ x ∷ []) #l ctxr
-pats-ctx (x ∷ ctx) (arg i (lit l) ∷ pats) =
-  pats-ctx ctx pats  -- skip
-pats-ctx (x ∷ ctx) (arg i (proj f) ∷ pats) =
-  -- Projection like in records?
-  return $ error "pats-ctx: don't know how to handle projections"
-  --{!!}
-pats-ctx (x ∷ ctx) (arg i absurd ∷ pats) =
-  -- Well, in this case the entire clause is absurd...
-  return $ error "pats-ctx: don't know how to handle absurd pattern"
-  --{!!}
-
-
--}
-
-{-# BUILTIN REWRITE _≡_ #-}
-{-# REWRITE +-identityʳ #-}
-
-
-
-{-
-data Prog : Set where
-  ok : List String → Prog
-  error : String → Prog
--}
 
 Prog = Err $ List String
 infixl 5 _#p_
 _#p_ = _++_
-
-{-
-_#p_ : Prog → Prog → Prog
-ok x #p ok y = ok $ x ++ y
-error x #p _ = error x
-_ #p error y = error y
--}
 
 okl : String → Prog
 okl s = ok ([ s ])
@@ -916,24 +745,6 @@ compile' (pat-lam cs@(_ ∷ _ ∷ _) args) t nm | just x =
 compile' x _ _  =
   return (error "compile' expected pattern-matching lambda")
 
-{-
-qq : Term → TC Term
-qq (var x args) = {!!}
-qq (con c args) = {!!}
-qq (def f args) with showName f
-... | "test-extract.with-2256" = derefImmediate (def f args)
-... | x = return (lit (string x)) -- {!!} --return (def f args)
-qq (lam v t) = return (lit (string "SHIT")) --{!!}
-qq (pat-lam [] args) = {!!}
-qq (pat-lam (clause ps t ∷ cs) args) = qq t
-qq (pat-lam (absurd-clause ps ∷ cs) args) = {!!}
-qq (pi a b) = {!!}
-qq (sort s) = {!!}
-qq (lit l) = {!!}
-qq (meta x x₁) = {!!}
-qq unknown = {!!}
-
--}
 
 macro
   compile : Term → Term → TC ⊤
@@ -951,11 +762,6 @@ macro
           unify a q
        e@(error s) →
           return e >>= quoteTC >>= unify a
-
-  --wth : Term → Term → TC ⊤
-  --wth f a = derefImmediate f >>= qq >>= quoteTC >>= unify a --{!!} --derefImmediate ("test-extract.with-2190") >>= unify a
-
-
 
 ---===== These are just all examples to play around ====---
 
