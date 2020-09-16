@@ -342,7 +342,7 @@ backin {n}{s}{s₁} inp w d = let
 
 
 s-w+1≤s : ∀ {s w} → s ≥ w → s > 0 → w > 0 → s ∸ w + 1 ≤ s
-s-w+1≤s {suc s} {suc w} (s≤s s≥w) s>0 w>0 rewrite (+-comm (s ∸ w) 1) = s≤s (n∸m≤n w s)
+s-w+1≤s {suc s} {suc w} (s≤s s≥w) s>0 w>0 rewrite (+-comm (s ∸ w) 1) = s≤s (m∸n≤m s w)
 
 
 helper : ∀ {n} {sI sw : Vec ℕ n}
@@ -411,6 +411,7 @@ backmulticonv {sI = sI} {sw} {so} W I B {sI>0} {sw>0} {sI≥sw} δo = let
   in (imap (λ iv → subst-ar (shape-same {sI = sI} {sw = sw} sI≥sw sI>0 sw>0) ((unimap δW) iv)) ,
      δI ,
      imap (λ iv → unscal $ unimap δB iv))
+
 
 
 instance

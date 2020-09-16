@@ -2,7 +2,7 @@
 module Array.Properties where
 
 open import Array.Base
-open import Data.Fin using (Fin; zero; suc; raise; fromℕ≤; fromℕ)
+open import Data.Fin using (Fin; zero; suc; raise; fromℕ≤; fromℕ<; fromℕ)
 open import Data.Nat
 open import Data.Nat.Properties
 open import Data.Vec
@@ -54,12 +54,12 @@ trans-=a {x = imap x} {imap y} {imap z} x=y y=z iv
 
 _<v?_ : ∀ {n} → Decidable (_<s_ {n = n})
 [] <v? [] = yes λ ()
-(x ∷ xs) <v? (y ∷ ys) = case (x <? y) , (xs <v? ys) of λ where
+(x ∷ xs) <v? (y ∷ ys) = case _,_ {B = λ x₂ → Dec (xs <s ys) }(x <? y) (xs <v? ys) of λ where
                          (yes pf-xy , yes pf-xsys) → yes λ where
                                                          zero    → pf-xy
                                                          (suc i) → pf-xsys i
                          (no pf-xy , _) → no (not-head pf-xy)
-                         (_ , no pf-xsys) → no (not-tail pf-xsys) 
+                         (_ , no pf-xsys) → no (not-tail pf-xsys)
   where        
     p1 : ∀ {n}{x y}{xs ys : Vec ℕ n} → (x ∷ xs) <s (y ∷ ys) → x < y
     p1 pf = pf zero
@@ -293,5 +293,5 @@ a→ix {d} (imap axf) (imap shf) ax<sh = ix-tabulate from-pf
   where
     from-pf : _
     from-pf i rewrite (lookup∘tabulate (shf ∘ (_∷ [])) i)
-      = fromℕ≤ (ax<sh (i ∷ []))
+      = fromℕ< (ax<sh (i ∷ []))
 

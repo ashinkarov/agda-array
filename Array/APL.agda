@@ -37,10 +37,6 @@ dyadic-type : ∀ a → Set a → Set a
 dyadic-type a X = ∀ {n m k}{s s₁ s₂}{{c : dy-args n m k s s₁ s₂}}
                   → Ar X n s → Ar X m s₁ → Ar X k s₂
 
-dyadic-type-c : ∀ a → Set a → Set a
-dyadic-type-c a X = ∀ {n m k}{s s₁ s₂}
-                    → Ar X n s → dy-args n m k s s₁ s₂ → Ar X m s₁ → Ar X k s₂
-
 lift-binary-op : ∀ {a}{X : Set a} → ∀ (op : X → X → X) → dyadic-type a X
 lift-binary-op op ⦃ c = n-n ⦄ (imap f) (imap g) = imap λ iv → op (f iv) (g iv)
 lift-binary-op op {s₁ = []} ⦃ c = n-0 ⦄ (imap f) (imap g) = imap λ iv → op (f iv) (g []) 
@@ -50,6 +46,11 @@ lift-binary-op op {s = [] } ⦃ c = 0-n ⦄ (imap f) (imap g) = imap λ iv → o
 lift-unary-op : ∀ {a}{X : Set a} → ∀ (op : X → X)
               → ∀ {n s} → Ar X n s → Ar X n s
 lift-unary-op f (imap g) = imap (λ iv → f (g iv))
+
+dyadic-type-c : ∀ a → Set a → Set a
+dyadic-type-c a X = ∀ {n m k}{s s₁ s₂}
+                    → Ar X n s → dy-args n m k s s₁ s₂ → Ar X m s₁ → Ar X k s₂
+
 
 -- Nat operations
 infixr 20 _+ₙ_ 
