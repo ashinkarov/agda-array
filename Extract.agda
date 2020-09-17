@@ -1,4 +1,3 @@
-{-# OPTIONS --rewriting  #-}
 open import Reflection hiding (return; _>>=_)
 
 open import Data.List renaming (_++_ to _++l_)
@@ -118,120 +117,6 @@ pi-to-ctx : Term → Ctx
 -- the patterns.
 --pats-ctx : Ctx → (List $ Arg Pattern) → TC $ Maybe Ctx
 
-{-
-pats-ctx : Ctx → (List $ Arg Pattern) → TC $ Err Ctx
-
--- try normalising every clause of the pat-lam, given
--- the context passed as an argument.  Propagate error that
--- can be produced by pats-ctx.
-pat-lam-norm : Term → Ctx → TC $ Err Term
-pat-lam-norm (pat-lam cs args) ctx = do
-  cs ← hlpr ctx cs
-  case cs of λ where
-    (ok cs) → return $ ok (pat-lam cs args)
-    (error s) → return $ error s
-  --return $ ok (pat-lam cs args)
-  where
-    hlpr : Ctx → List Clause → TC $ Err (List Clause)
-    hlpr ctx [] = return $ ok []
-    hlpr ctx (clause ps t ∷ l) = do
-      ctx' ← pats-ctx ctx ps
-      case ctx' of λ where
-        (ok ctx'') → do
-          -- XXX this ++ reverse ctx...
-          t ← inContext (reverse ctx'' {- ++ reverse ctx -}) (normalise t)
-          l ← hlpr ctx l
-          return (ok [ clause ps t ] ++ l)
-          --return $ clause ps t ∷ l
-        (error s) →
-          --return $ clause ps t ∷ l
-          -- Make sure that we properly error out
-          -- Uncomment above line, in case you want to skip the error.
-          return $ error s
-    hlpr ctx (a ∷ l) = do
-      l' ← hlpr ctx l
-      return (ok [ a ] ++ l')
-      --return (a ∷ l')
-pat-lam-norm x ctx = return $ error "pat-lam-norm: Shouldn't happen" --return $ ok x
-
-
-
-lkup-var : List (Arg Term) → (n : ℕ) → Err (Arg Term)
-lkup-var [] _ = ok (vArg (var 42 [])) --error "lkup-var: ctx too short"
-lkup-var (x ∷ l) zero = ok x
-lkup-var (x ∷ l) (suc n) = lkup-var l n
-
-{-
-drop-ctx : List (Arg Term) → ℕ → Err (List $ Arg Term)
-drop-ctx [] zero = ok []
-drop-ctx [] (suc p) = error "take-ctx: ctx too short for the prefix"
-drop-ctx (x ∷ l) zero = ok (x ∷ l)
-drop-ctx (x ∷ l) (suc p) = drop-ctx l p
--}
-
-drop-ctx' : List (Arg Term) → ℕ → List $ Arg Term
-drop-ctx' l zero = l
-drop-ctx' [] (suc n) = []
-drop-ctx' (x ∷ l) (suc n) = drop-ctx' l n
-
-
-take-ctx' : List (Arg Term) → ℕ → List $ Arg Term
-take-ctx' [] zero = []
-take-ctx' [] (suc p) = [] --error "take-ctx: ctx too short for the prefix"
-take-ctx' (x ∷ l) zero = []
-take-ctx' (x ∷ l) (suc p) = x ∷ take-ctx' l p
-
-map-subst-args : (#n : ℕ) → List (Arg Term) → ℕ → List (Arg Term) → Err (List $ Arg Term)
-
-subst-args : (#n : ℕ) → List (Arg Term) → (offset : ℕ) → Type → Err Type
-subst-args #n ctx off (var x []) with x N.≥? off
-... | yes x≥off = do
-      at ← lkup-var ctx (x ∸ off)
-      case at of λ where
-        (arg _ t) → ok t
-... | no x<off =
-      ok $ var x []
-subst-args #n ctx off (var x args@(_ ∷ _)) =
-      error "subst-args: can't deal with local functions yet, fixme"
-subst-args #n ctx off (con c args) = do
-      args′ ← map-subst-args #n ctx off args
-      return $ con c args′
-subst-args #n ctx off (def f args) = do
-      args′ ← map-subst-args #n ctx off args
-      return $ def f args′
-subst-args #n ctx off (lam v (abs s x)) = do
-      --x′ ← subst-args #n ctx (1 + off) x
-      --return $ lam v $ abs s x′
-      error "LAMBDA"
-subst-args #n ctx off (pat-lam cs args) =
-      error "subst-args: can't do pat-lambdas yet, fixme"
-subst-args zero ctx off (Π[ s ∶ (arg i a) ] b) = do
-      a′ ← subst-args zero ctx off a
-      b′ ← subst-args zero ctx (1 + off) b
-      return $ Π[ s ∶  (arg i a′)] b′
-subst-args (suc #n) ctx off (Π[ s ∶ a ] x) =
-      -- XXX
-      subst-args #n ctx off x
-subst-args #n ctx off (sort (set t)) = do
-      t′ ← subst-args #n ctx off t
-      return $ sort $ set t′
-subst-args #n ctx off t@(sort (lit n)) = ok t
-subst-args #n ctx off t@(sort unknown) = ok t
-subst-args #n ctx off t@(lit l) = ok t
-subst-args #n ctx off (meta x x₁) =
-      error "subst-args: metas in found in the type"
-subst-args #n ctx off unknown = ok unknown
-
-map-subst-args #n ctx m [] = return []
-map-subst-args #n ctx m (arg i x ∷ args) = do
-  x ← subst-args #n ctx m x
-  ok [ arg i x ] ++ map-subst-args #n ctx m args
-
-
-args-to-ctx : List (Arg Term) → (o : ℕ) → List (Arg Term)
-
--}
-
 macro
   reflect : Term → Term → TC ⊤
   reflect f a = (derefImmediate f)
@@ -258,10 +143,6 @@ macro
 -- FIXME we probably want to error out on these two functions.
 pi-to-ctx (Π[ s ∶ a ] x) = (a ∷ pi-to-ctx x)
 pi-to-ctx _ = []
-
-
---{-# BUILTIN REWRITE _≡_ #-}
---{-# REWRITE +-identityʳ #-}
 
 
 Prog = Err $ List String
@@ -425,7 +306,7 @@ clause-ctx-vars (arg i (con c ps) ∷ l) (v ∷ vars) vcnt with showName c
            #c clause-ctx-vars l vars vcnt
 ... | x = error ("clause-ctx-vars: don't know what to do with `" ++s x ++s "` constructor in patterns")
 clause-ctx-vars (arg i dot ∷ l) (v ∷ vars) vcnt =
-           -- Dot pattern are skipped.
+           -- Dot patterns are skipped.
            clause-ctx-vars l vars vcnt
 clause-ctx-vars (arg (arg-info visible r) (var s) ∷ l) (v ∷ vars) vcnt =
            -- If we have "_" as a variable, we need  to insert it
