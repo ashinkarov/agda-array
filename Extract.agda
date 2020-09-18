@@ -1,11 +1,12 @@
 open import Reflection hiding (return; _>>=_)
+open import Reflection.Term
 
 open import Data.List renaming (_++_ to _++l_)
 open import Data.Vec as V using (Vec; updateAt)
 open import Data.Unit
 open import Data.Nat as N
 open import Data.Nat.Properties
-open import Data.Fin using (Fin; #_; suc; zero)
+open import Data.Fin using (Fin; #_; suc; zero; fromℕ<)
 open import Data.Maybe hiding (_>>=_; map)
 open import Function
 open import Data.Bool
@@ -90,7 +91,7 @@ instance
 
 defToTerm : Name → Definition → List (Arg Term) → Term
 defToTerm _ (function cs) as = pat-lam cs as
-defToTerm _ (constructor′ d) as = con d as
+defToTerm _ (data-cons d) as = con d as
 defToTerm _ _ _ = unknown
 
 derefImmediate : Term → TC Term
@@ -221,8 +222,14 @@ error s #c _ = error s
 _ #c error s = error s
 ok (clcond a b c) #c ok (clcond a' b' c') = ok (clcond (a ++ a') (b ++ b') (c ++ c'))
 
+
+tel-lookup-name : Telescope → ℕ → Maybe String
+tel-lookup-name tel n with n N.<? length tel
+... | yes n<l = just $ proj₁ $ lookup tel $ fromℕ< n<l
+... | no _ = nothing
+
 {-# TERMINATING #-}
-clause-ctx-vars : (pats : List $ Arg Pattern) → (vars : List String) → (counter : ℕ) → MbClCond
+clause-ctx-vars : Telescope → (pats : List $ Arg Pattern) → (vars : List String) → (counter : ℕ) → MbClCond
 
 showLitProg : Literal → Prog
 
@@ -240,16 +247,16 @@ join' x@(_ ∷ _) d _ = sjoin x d
 
 compile-cls : List Clause → State → Prog
 compile-cls [] s = error "comile-cls: expected at least one clause"
-compile-cls (clause ps t ∷ []) s with clause-ctx-vars ps (var-names s) 0
+compile-cls (clause tel ps t ∷ []) s with clause-ctx-vars tel ps (var-names s) 0
 ... | error msg = error msg
 ... | ok (clcond vars assgns conds) = let
         as = sconc (map (_++s "\n") assgns)
         rv = retvar s ++s " = "
     in okl (as ++s rv) #p comp-term t vars #p okl ";"
-compile-cls (absurd-clause ps ∷ []) s with clause-ctx-vars ps (var-names s) 0
+compile-cls (absurd-clause tel ps ∷ []) s with clause-ctx-vars tel ps (var-names s) 0
 ... | error msg = error msg
 ... | ok (clcond vars assgns conds) = okl "unreachable ();"
-compile-cls (clause ps t ∷ xs@(_ ∷ _)) s with clause-ctx-vars ps (var-names s) 0
+compile-cls (clause tel ps t ∷ xs@(_ ∷ _)) s with clause-ctx-vars tel ps (var-names s) 0
 ... | error msg = error msg
 ... | ok (clcond vars assgns conds) = let
         cs = join' conds " && " "true"
@@ -259,7 +266,7 @@ compile-cls (clause ps t ∷ xs@(_ ∷ _)) s with clause-ctx-vars ps (var-names 
        #p okl "else {"
        #p compile-cls xs s
        #p okl "}"
-compile-cls (absurd-clause ps ∷ xs@(_ ∷ _)) s with clause-ctx-vars ps (var-names s) 0
+compile-cls (absurd-clause tel ps ∷ xs@(_ ∷ _)) s with clause-ctx-vars tel ps (var-names s) 0
 ... | error msg = error msg
 ... | ok (clcond vars assgns conds) = let
         -- XXX it would be weird if conds were empty... catch it?
@@ -268,83 +275,89 @@ compile-cls (absurd-clause ps ∷ xs@(_ ∷ _)) s with clause-ctx-vars ps (var-n
        #p compile-cls xs s
        #p okl "}"
 
-clause-ctx-vars (arg i (con c ps) ∷ l) (v ∷ vars) vcnt with showName c
+clause-ctx-vars tel (arg i (con c ps) ∷ l) (v ∷ vars) vcnt with showName c
 ... | "Agda.Builtin.List.List.[]" =
            ok (clcond [] [] [ "emptyvec_p (" ++s v ++s ")" ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Agda.Builtin.List.List._∷_" =
            ok (clcond [] [] [ "nonemptyvec_p (" ++s v ++s ")" ])
-           #c clause-ctx-vars (ps ++ l) (("hd (" ++s v ++s ")") ∷ ("tl (" ++s v ++s ")") ∷ vars) vcnt
+           #c clause-ctx-vars tel (ps ++ l) (("hd (" ++s v ++s ")") ∷ ("tl (" ++s v ++s ")") ∷ vars) vcnt
 ... | "Agda.Builtin.Bool.Bool.true" =
            ok (clcond [] [] [ v {- == true -} ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Agda.Builtin.Bool.Bool.false" =
            ok (clcond [] [] [ "! " ++s v ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Agda.Builtin.Nat.Nat.suc" =
            ok (clcond [] [] [ v ++s " > 0" ])
-           #c clause-ctx-vars (ps ++ l) ((v ++s " - 1") ∷ vars) vcnt
+           #c clause-ctx-vars tel (ps ++ l) ((v ++s " - 1") ∷ vars) vcnt
 ... | "Agda.Builtin.Nat.Nat.zero" =
            ok (clcond [] [] [ v ++s " == 0" ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Data.Fin.Base.Fin.zero" =
            ok (clcond [] [] [ v ++s " == 0" ])  -- XXX can also add v < u
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Data.Fin.Base.Fin.suc" =
            ok (clcond [] [] [ v ++s " > 0" ])  -- XXX can also add v < u
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Data.Vec.Base.Vec.[]"  =
            ok (clcond [] [] [ "emptyvec_p (" ++s v ++s ")" ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | "Data.Vec.Base.Vec._∷_" =
            ok (clcond [] [] [ "nonemptyvec_p (" ++s v ++s ")" ])
-           #c clause-ctx-vars (ps ++ l) (("len (" ++s v ++s ") - 1") ∷ ("hd (" ++s v ++s ")") ∷ ("tl (" ++s v ++s ")") ∷ vars) vcnt
+           #c clause-ctx-vars tel (ps ++ l) (("len (" ++s v ++s ") - 1") ∷ ("hd (" ++s v ++s ")") ∷ ("tl (" ++s v ++s ")") ∷ vars) vcnt
       -- Well, let's see how far we can go with this hack
 ... | "Array.Base.Ar.imap" =
 --... | "test-extract.Ar'.imap" =
            ok (clcond [ "IMAP_" ++s v ] [ "\n#define IMAP_" ++s v ++s "(__x) " ++s v ++s "[__x]\n" ] [ "true" ])
-           #c clause-ctx-vars l vars vcnt
+           #c clause-ctx-vars tel l vars vcnt
 ... | x = error ("clause-ctx-vars: don't know what to do with `" ++s x ++s "` constructor in patterns")
-clause-ctx-vars (arg i dot ∷ l) (v ∷ vars) vcnt =
+clause-ctx-vars tel (arg i (dot t) ∷ l) (v ∷ vars) vcnt =
            -- Dot patterns are skipped.
-           clause-ctx-vars l vars vcnt
-clause-ctx-vars (arg (arg-info visible r) (var s) ∷ l) (v ∷ vars) vcnt =
-           -- If we have "_" as a variable, we need  to insert it
-           -- into the list, but we don't generate an assignment for it.
-           let asgn = case s ≈? "_" of λ where
-                          -- XXX hopefully this is fine, otherwise
-                          -- we can do the same thing as for hidden
-                          -- vars.
-                (yes p) → []
-                (no ¬p) → [ s ++s " = " ++s v ++s ";" ]
-           in ok (clcond [ s ] asgn [])
-           #c clause-ctx-vars l vars vcnt
-clause-ctx-vars (arg (arg-info hidden r) (var s) ∷ l) (v ∷ vars) vcnt =
-           -- Hidden variables are simply added to the context
-           -- as regular variables
-           let s , vcnt = case s ≈? "_" of λ where
-                (yes p) → s ++ "_" ++ showNat vcnt , 1 + vcnt
-                (no ¬p) → s , vcnt
-           in ok (clcond [ s ] [ s ++ " = " ++ v ++ ";" ] [])
-           #c clause-ctx-vars l vars vcnt
+           clause-ctx-vars tel l vars vcnt
+clause-ctx-vars tel (arg (arg-info visible r) (var i) ∷ l) (v ∷ vars) vcnt =
+           case tel-lookup-name tel i of λ where
+             (just s) →
+                -- If we have "_" as a variable, we need  to insert it
+                -- into the list, but we don't generate an assignment for it.
+                let asgn = case s ≈? "_" of λ where
+                                -- XXX hopefully this is fine, otherwise
+                                -- we can do the same thing as for hidden
+                                -- vars.
+                      (yes p) → []
+                      (no ¬p) → [ s ++s " = " ++s v ++s ";" ]
+                in ok (clcond [ s ] asgn [])
+                #c clause-ctx-vars tel l vars vcnt
+             nothing → error "Variable lookup in telescope failed"
+clause-ctx-vars tel (arg (arg-info hidden r) (var i) ∷ l) (v ∷ vars) vcnt =
+           case tel-lookup-name tel i of λ where
+             (just s) →
+                -- Hidden variables are simply added to the context
+                -- as regular variables
+                let s , vcnt = case s ≈? "_" of λ where
+                      (yes p) → s ++ "_" ++ showNat vcnt , 1 + vcnt
+                      (no ¬p) → s , vcnt
+                in ok (clcond [ s ] [ s ++ " = " ++ v ++ ";" ] [])
+                #c clause-ctx-vars tel l vars vcnt
+             nothing → error "Variable lookup in telescope failed"
 
-clause-ctx-vars (arg (arg-info instance′ r) (var s) ∷ l) (v ∷ vars) vcnt =
+clause-ctx-vars tel (arg (arg-info instance′ r) (var s) ∷ l) (v ∷ vars) vcnt =
            error "FIXME handle instance variables"
-clause-ctx-vars (arg i (lit x) ∷ l) (v ∷ vars) vcnt =
+clause-ctx-vars tel (arg i (lit x) ∷ l) (v ∷ vars) vcnt =
            case showLitProg x of λ where
                 (error s) → error s
                 (ok s) → ok (clcond [] [] [ v ++s " == " ++s (sconc s) ])
-                         #c clause-ctx-vars l vars vcnt
-clause-ctx-vars (arg i (proj f) ∷ l) (v ∷ vars) vcnt =
+                         #c clause-ctx-vars tel l vars vcnt
+clause-ctx-vars tel (arg i (proj f) ∷ l) (v ∷ vars) vcnt =
            error "FIXME proj pattern"
-clause-ctx-vars (arg i absurd ∷ l)  (v ∷ vars) vcnt =
+clause-ctx-vars tel (arg i absurd ∷ l)  (v ∷ vars) vcnt =
            -- I assume that absurd can only appear in the
            -- absurd clause, therefore, we don't need a condition
            -- for this pattern, so we just skip it.
-           clause-ctx-vars l vars vcnt
-clause-ctx-vars [] [] _ =
+           clause-ctx-vars tel l vars vcnt
+clause-ctx-vars _ [] [] _ =
            ok (clcond [] [] [])
-clause-ctx-vars _  _  _ =
+clause-ctx-vars _ _  _  _ =
            error "mismatching number of patterns and types"
 
 
