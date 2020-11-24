@@ -153,7 +153,7 @@ logistic {s} ω = (scal 1.0) ÷ᵣ (scal 1.0) +ᵣ *ᵣ (scal 0.0) -ᵣ ω
 -- meansqerr←{÷∘2+/,(⍺-⍵)*2}
 meansqerr : ∀ {n s} → Ar Float n s → Ar Float n s → Scal Float
 meansqerr α ω = 
-    _÷⟨ n-n ⟩ᵣ (cst 2.0) $ (_+ᵣ_ / , (α -⟨ n-n ⟩ᵣ ω) ×ᵣ (α -⟨ n-n ⟩ᵣ ω))
+    _÷⟨ n-n ⟩ᵣ (cst 2.0) $ (_+⟨ n-n ⟩ᵣ_ / , (α -⟨ n-n ⟩ᵣ ω) ×ᵣ (α -⟨ n-n ⟩ᵣ ω))
 
 -- backavgpool←{2⌿2/⍵÷4}⍤2
 backavgpool : ∀ {s}
@@ -236,7 +236,7 @@ avgpool {s} (imap p) = imap (λ iv → let
                             jx = bx +⟨ n-n ⟩ₙ i
                             in p (a→ix jx sh (A<B⇒K<2⇒A*2+K<B*2 ix<s pf))
 
-                         s = _÷⟨ n-n ⟩ᵣ (scal 4.0) $ _+ᵣ_ / , use-ixs ̈ ixs
+                         s = _÷⟨ n-n ⟩ᵣ (scal 4.0) $ _+⟨ n-n ⟩ᵣ_ / , use-ixs ̈ ixs
                        in unscal s)
 
 -- multiconv←{(a ws bs)←⍵⋄bs{⍺+⍵ conv a}⍤(0,(⍴⍴a))⊢ws}
@@ -284,7 +284,6 @@ a+b-a≡a {zero} {[]} {s} {x ∷ []} = magic-fin x
 a+b-a≡a {suc n} {x ∷ s₁} {s} {I0} = m+n∸m≡n (s I0) x
 a+b-a≡a {suc n} {x ∷ s₁} {s} {suc j ∷ []} = a+b-a≡a {s₁ = s₁} {s = λ { (j ∷ []) → s (suc j ∷ [])}} {jv = j ∷ []}
 
--- XXX we can generalise this by providing
 pre-pad : ∀ {a}{X : Set a}{n}{s₁ : Vec ℕ n}
         → (sh : Ar ℕ 1 (n ∷ []))
         → X
@@ -303,6 +302,12 @@ pre-pad {s₁ = s₁} (imap s) e (imap f) = imap body
                                           (a+b-a≡a {s₁ = s₁} {s = s} {jv = jv})
                       in f (subst-ix (λ i → lookup∘tabulate _ i) fv)
                    (no ¬p) → e
+
+arel-thm : ∀ {n s}{a b : Ar ℕ n s} → ARel _≥_ a b → a ≥a b
+arel-thm {a = imap a} {imap b} pf = pf
+
+≥a-lkup : ∀ {n s}{a b : Ar ℕ n s} → a ≥a b → (iv : Ix n s) → unimap a iv ≥ unimap b iv
+≥a-lkup {a = imap a} {imap b} p iv = p iv
 
 
 _↑⟨_⟩_ : ∀ {a}{X : Set a}{n}{s : Vec ℕ n}
@@ -418,11 +423,11 @@ instance
   auto≥ : ∀ {m n : ℕ} → {{_ : True (m ≥? n)}} → m ≥ n
   auto≥ {m} {n} {{c}} = toWitness c
 
-  auto≥a : ∀ {d s}{p q : Ar ℕ d s} {{_ : True (p ≥a? q)}} → (p ≥a q)
-  auto≥a {p = imap x} {imap x₁} ⦃ c ⦄ = toWitness c
+auto≥a : ∀ {d s}{p q : Ar ℕ d s} {_ : True (p ≥a? q)} → (p ≥a q)
+auto≥a {p = imap x} {imap x₁} { c } = toWitness c
 
-  auto<a : ∀ {d s}{p q : Ar ℕ d s} {{_ : True (p <a? q)}} → (p <a q)
-  auto<a {p = imap x} {imap x₁} ⦃ c ⦄ = toWitness c
+auto<a : ∀ {d s}{p q : Ar ℕ d s} {{_ : True (p <a? q)}} → (p <a q)
+auto<a {p = imap x} {imap x₁} ⦃ c ⦄ = toWitness c
 
 
 test-zhang : (inp : Ar Float _ (28 ∷ 28 ∷ []))

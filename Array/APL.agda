@@ -121,7 +121,7 @@ a ÷⟨ c ⟩ᵣ b = _÷ᵣ_ {{c = c}} a b
 
 
 infixr 20 *ᵣ_
-*ᵣ_ = lift-unary-op primExp
+*ᵣ_ = lift-unary-op primFloatExp
 
 
 module xx where
@@ -137,7 +137,7 @@ module xx where
   --test = (s +ₙ s) 
   test₄ = s +⟨ n-n ⟩ₙ s
 
-  test₅ : ∀ {n s s₁} → Ar ℕ n s → Ar ℕ 0 s₁ → Ar ℕ n s
+  test₅ : ∀ {n s} → Ar ℕ n s → Ar ℕ 0 [] → Ar ℕ n s
   test₅ = _+ₙ_
 
 
@@ -147,7 +147,7 @@ infixr 20 ρ_
 
 infixr 20 ,_
 ,_ : ∀ {a}{X : Set a}{n s} → Ar X n s → Ar X 1 (prod s ∷ [])
-,_ {s = s} (imap p) = imap λ iv → p (off→idx s iv)
+,_ {s = s} (p) = imap λ iv → unimap p (off→idx s iv)
 
 
 -- Reshape
@@ -410,6 +410,7 @@ _̈⟨_⟩_ : ∀ {a}{X Y Z : Set a}{n s}
      → Ar X n s
      → (X → Y → Z)
      → Ar Y n s → Ar Z n s
-(imap p) ̈⟨ f ⟩ (imap p₁) = imap λ iv → f (p iv) (p₁ iv)
+--(imap p) ̈⟨ f ⟩ (imap p₁) = imap λ iv → f (p iv) (p₁ iv)
+p ̈⟨ f ⟩ p₁ = imap λ iv → f (unimap p iv) (unimap p₁ iv)
 
 

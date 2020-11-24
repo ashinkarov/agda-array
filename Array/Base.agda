@@ -41,9 +41,19 @@ ix→v (x ∷ xs) = toℕ x ∷ ix→v xs
 
 --data Ar {a} (X : Set a) (d : ℕ) (s : Vec ℕ d) : Set a where
 --  imap : (Ix d s → X) → Ar X d s
+--
+-- We used this type before `withReconstructed` was introduced, so that
+-- we could obtain the shape of arrays at each imap.  Now we have switched
+-- to the record that gives us η-equality.
+--
+--data Ar {a} (X : Set a) (d : ℕ) : (Vec ℕ d) → Set a where
+--  imap : ∀ {s} → (Ix d s → X) → Ar X d s
 
-data Ar {a} (X : Set a) (d : ℕ) : (Vec ℕ d) → Set a where
-  imap : ∀ {s} → (Ix d s → X) → Ar X d s
+record Ar {a} (X : Set a) (d : ℕ) (s : Vec ℕ d) : Set a where
+  constructor imap
+  field sel : Ix d s → X
+open Ar public
+
 
 unimap : ∀ {a}{X : Set a}{d s} → Ar X d s → Ix d s → X
 unimap (imap x) = x
@@ -178,6 +188,9 @@ a*b≢0⇒b≢0 {a} {b} rewrite (*-comm a b) = a*b≢0⇒a≢0
    in contradiction a<a (n≮n a)
 
 
+/-mono-f : ∀ {a b c} → a < b * c → (b≢0 : False (b ≟ 0))
+         → (a / b) {≢0 = b≢0} < c
+/-mono-f {b = b}{c} a<b*c ≢0 rewrite *-comm b c = /-mono-x a<b*c ≢0
 
 
 divmod-thm : ∀ {a b m n}
@@ -312,9 +325,6 @@ a<c⇒c|b⇒[a+b]%c≡a {a} {b} {c@(suc c-1)} a<c c|b = trans (%-remove-+ʳ a c|
 a<c⇒c|b⇒[a+b]mod[c]≡a : ∀ {b c} → (a : Fin c) → (c ∣ b) → ∀ {≢0} → ((toℕ a + b) mod c) {≢0} ≡ a
 a<c⇒c|b⇒[a+b]mod[c]≡a {b} {suc c-1} a c|b {≢0} = toℕ-injective (trans (toℕ-fromℕ< _) (a<c⇒c|b⇒[a+b]%c≡a (toℕ<n a) c|b))
 
-hlpr : ∀ {m n a x}{≢0} → a + m * n ≡ x → a < n → (x / n) {≢0} ≡ m
-hlpr {m} {n} {a} {x} {≢0} refl a<n = trans (+-distrib-/-∣ʳ {m = a} (m * n) {d = n} {≢0} (n∣m*n m))
-                                           (b≡0+c≡a⇒b+c≡a (m<n⇒m/n≡0 a<n) (m*n/n≡m m n))
 
 
 ixl-cong : ∀ {s}{i : Ix 1 (s ∷ [])} → (ix-lookup i zero) ∷ [] ≡ i
@@ -339,7 +349,10 @@ oi-io {x = x ∷ xs} {i ∷ iv} with prod (x ∷ xs) ≟ 0
                                        (trans (cong (_∷ []) (a<c⇒c|b⇒[a+b]mod[c]≡a _ (n∣m*n (toℕ i) {n = (prod xs)})))
                                               ixl-cong)))
                           oi-io)
-
+   where
+     hlpr : ∀ {m n a x}{≢0} → a + m * n ≡ x → a < n → (x / n) {≢0} ≡ m
+     hlpr {m} {n} {a} {x} {≢0} refl a<n = trans (+-distrib-/-∣ʳ {m = a} (m * n) {d = n} {≢0} (n∣m*n m))
+                                                (b≡0+c≡a⇒b+c≡a (m<n⇒m/n≡0 a<n) (m*n/n≡m m n))
 
 
 -- rewrite (v-rm-thm {a = x} {b = prod xs} {x = i} {y = (ix-lookup (idx→off xs iv) zero)} {b≢0 = (a*b≢0⇒b≢0 {a = x} ¬p)})
